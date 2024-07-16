@@ -118,7 +118,7 @@ def get_path(id, date):
 
 def eval_response(response, job_title, id, link, replace=False):
     date = response["post_date"]
-    if bool(response[job_title]) and not is_outdated(date):
+    if bool(response[job_title]) and not is_outdated(date) and response["organization"] != "LinkedIn":
         with open(get_path(id, date), "w") as f:
             f.write(str(response))
 
@@ -142,11 +142,12 @@ def collect_result(i):
         status_code = response.status_code
         if status_code == 404:
             response.raise_for_status()
-        text = scrape_text(link)
-        response = ask_gemini(job_title, text)
-        response["link"] = link
-        print(response)
-        eval_response(response, job_title, i, link)
+        else:
+            text = scrape_text(link)
+            response = ask_gemini(job_title, text)
+            response["link"] = link
+            print(response)
+            eval_response(response, job_title, i, link)
     except Exception as e:
         print(link + e)
         if status_code == 404:
@@ -167,17 +168,19 @@ def clean_data():
     con = sqlite3.connect("jobs.db")
     cur = con.cursor()
 
-    bad_entries = cur.execute("SELECT id FROM job_links WHERE job_title IS NULL OR organization IS NULL OR organization = 'LinkedIn'")
+    bad_entries = cur.execute("""SELECT id FROM job_links WHERE job_title IS NULL OR job_title = 'Not Found' 
+                            OR job_title = 'Not found' OR job_title = 'Not available' OR job_title = 'None' 
+                            OR organization IS NULL OR organization = 'LinkedIn' OR job_title = 'N/A'""")
     bad_entries = bad_entries.fetchall()
     bad_entries = [bad_entry[0] for bad_entry in bad_entries]
     count = len(bad_entries)
     if count:
-        iter_result(bad_entries) #run the links of bad entries again
+        iter_result(bad_entries) #iterate through the links of bad entries again
         
         #if there are still bad entries, delete them
         bad_entries = cur.execute("""SELECT id FROM job_links WHERE job_title IS NULL OR job_title = 'Not Found' 
                                   OR job_title = 'Not found' OR job_title = 'Not available' OR job_title = 'None' 
-                                  OR organization IS NULL OR organization = 'LinkedIn'""") 
+                                  OR organization IS NULL OR organization = 'LinkedIn' OR job_title = 'N/A'""") 
         bad_entries = bad_entries.fetchall()
         for bad_entry in bad_entries:
             cur.execute("DELETE FROM job_links WHERE id = ?", [bad_entry[0]])
