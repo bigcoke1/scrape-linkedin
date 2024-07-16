@@ -175,7 +175,9 @@ def clean_data():
         iter_result(bad_entries) #run the links of bad entries again
         
         #if there are still bad entries, delete them
-        bad_entries = cur.execute("SELECT id FROM job_links WHERE job_title IS NULL OR organization IS NULL OR organization = 'LinkedIn'") 
+        bad_entries = cur.execute("""SELECT id FROM job_links WHERE job_title IS NULL OR job_title = 'Not Found' 
+                                  OR job_title = 'Not found' OR job_title = 'Not available' OR job_title = 'None' 
+                                  OR organization IS NULL OR organization = 'LinkedIn'""") 
         bad_entries = bad_entries.fetchall()
         for bad_entry in bad_entries:
             cur.execute("DELETE FROM job_links WHERE id = ?", [bad_entry[0]])
@@ -186,11 +188,11 @@ def clean_data():
 
 if __name__ == "__main__":
     job_title = input("Job title you want to search for: \n>>> ")
-    iterations = int(input("how many iterations? \n>>> "))
     job_title = job_title.lower()
-    #sign_in()
-    id = get_starting_id() + 1
-    iter_result(range(id, id + iterations))
+    iterations = int(input("how many iterations? \n>>> "))
+    if iterations:
+        id = get_starting_id() + 1
+        iter_result(range(id, id + iterations))
 
     print("all current jobs done... cleaning previous data...")
     count = clean_data() #clean entries after each time we run
