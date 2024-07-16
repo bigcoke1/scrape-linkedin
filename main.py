@@ -37,9 +37,7 @@ def init_webdriver():
 
     return driver
 
-driver = init_webdriver()
-
-def sign_in():
+"""def sign_in():
     driver.get("https://www.linkedin.com/")
 
     WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
@@ -55,6 +53,7 @@ def sign_in():
     password_input.send_keys(Keys.ENTER)
     
     print(f"signed in to {ACCOUNT_INFO["email"]}")
+"""
 
 def get_link(id):
     return BASE_URL + str(id)
@@ -117,7 +116,7 @@ def get_path(id, date):
     path = os.path.join("result", path)
     return path
 
-def eval_response(response, job_title, id, link):
+def eval_response(response, job_title, id, link, replace=False):
     date = response["post_date"]
     if bool(response[job_title]) and not is_outdated(date):
         with open(get_path(id, date), "w") as f:
@@ -126,10 +125,14 @@ def eval_response(response, job_title, id, link):
     con = sqlite3.connect("jobs.db")
     cur = con.cursor()
     cur.execute("SELECT * FROM job_links WHERE id = ?", [id])
-    if not cur.fetchone():
+    entry = cur.fetchone()
+    if entry and replace:
+        cur.execute("DELETE FROM job_links WHERE id = ?", [id])
+    if not entry or replace:
         cur.execute("INSERT INTO job_links (id, desired_result, organization, link, job_title, date) VALUES (?, ?, ?, ?, ?, ?)",
                     [id, response[job_title], response["organization"], link, response["actual_job_title"], date])
-        con.commit()
+    con.commit()
+    con.close()
 
 def collect_result(i):
     link = get_link(i)
@@ -141,12 +144,9 @@ def collect_result(i):
             response.raise_for_status()
         text = scrape_text(link)
         response = ask_gemini(job_title, text)
-        if response["actual_job_title"] == "None":
-            raise Exception(f"{link} is None, retrying with the same link")
-        else:
-            response["link"] = link
-            print(response)
-            eval_response(response, job_title, i, link)
+        response["link"] = link
+        print(response)
+        eval_response(response, job_title, i, link)
     except Exception as e:
         print(link + e)
         if status_code == 404:
@@ -154,17 +154,44 @@ def collect_result(i):
         else: 
             collect_result(i)
 
+def iter_result(id_list):
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(collect_result, i): i for i in id_list}
+        for future in as_completed(futures):
+            try:
+                print(f"{future} job done")
+            except Exception as exc:
+                print(f"An error occurred: {exc}")
+
+def clean_data():
+    con = sqlite3.connect("jobs.db")
+    cur = con.cursor()
+
+    bad_entries = cur.execute("SELECT id FROM job_links WHERE job_title IS NULL OR organization IS NULL OR organization = 'LinkedIn'")
+    bad_entries = bad_entries.fetchall()
+    bad_entries = [bad_entry[0] for bad_entry in bad_entries]
+    count = len(bad_entries)
+    if count:
+        iter_result(bad_entries) #run the links of bad entries again
+        
+        #if there are still bad entries, delete them
+        bad_entries = cur.execute("SELECT id FROM job_links WHERE job_title IS NULL OR organization IS NULL OR organization = 'LinkedIn'") 
+        bad_entries = bad_entries.fetchall()
+        for bad_entry in bad_entries:
+            cur.execute("DELETE FROM job_links WHERE id = ?", [bad_entry[0]])
+        con.commit()
+    con.close()
+
+    return count
+
 if __name__ == "__main__":
     job_title = input("Job title you want to search for: \n>>> ")
     iterations = int(input("how many iterations? \n>>> "))
     job_title = job_title.lower()
     #sign_in()
     id = get_starting_id() + 1
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {executor.submit(collect_result, i): i for i in range(id, id + iterations)}
-        for future in as_completed(futures):
-            try:
-                print(f"{future} job done")
-            except Exception as exc:
-                print(f"An error occurred: {exc}")
-    driver.quit()
+    iter_result(range(id, id + iterations))
+
+    print("all current jobs done... cleaning previous data...")
+    count = clean_data() #clean entries after each time we run
+    print(f"done cleaning, {count} entries deleted or replaced")
