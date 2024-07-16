@@ -18,8 +18,6 @@ import os
 BASE_URL = "https://www.linkedin.com/jobs/view/"
 START_ID = 9980000
 
-ACCOUNT_INFO = {"email": "a23539945@gmail.com", "password": "JGJ%.KfP!ybwjg4"}
-
 model = genai.GenerativeModel("gemini-1.5-flash")
 
 def init_webdriver():
@@ -36,24 +34,6 @@ def init_webdriver():
     driver = webdriver.Chrome(options=chrome_options)
 
     return driver
-
-"""def sign_in():
-    driver.get("https://www.linkedin.com/")
-
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-    button_selector = "#main-content > section.section.min-h-\[560px\].flex-nowrap.pt-\[40px\].babybear\:flex-col.babybear\:min-h-\[0\].babybear\:px-mobile-container-padding.babybear\:pt-\[24px\] > div > div > a"
-    sign_in_button = driver.find_element(By.CSS_SELECTOR, button_selector)
-    sign_in_button.click()
-    
-    email_input = driver.find_element(By.CSS_SELECTOR, "#username")
-    password_input = driver.find_element(By.CSS_SELECTOR, "#password")
-
-    email_input.send_keys(ACCOUNT_INFO["email"])
-    password_input.send_keys(ACCOUNT_INFO["password"])
-    password_input.send_keys(Keys.ENTER)
-    
-    print(f"signed in to {ACCOUNT_INFO["email"]}")
-"""
 
 def get_link(id):
     return BASE_URL + str(id)
